@@ -20,7 +20,8 @@ papers that use different splits or normalisation (see the paper, Section 8).
 
 ```
 notebooks/
-  muharaf_ablation.ipynb      Muharaf-only pipeline: filtering, training, decoding, LM, ablations (Tables 13-14)
+  muharaf_main_runs.ipynb     main runs (80 epochs), decoding, LM, validation error analysis (Tables 5-12)
+  muharaf_ablation.ipynb      ablation study and decoding ablation (Tables 13-14)
 scripts/
   export_line_ids.py          rebuilds the line-ID lists and the filter counts (Table 1) from the public dataset
 data/line_ids/
@@ -59,26 +60,26 @@ Exact versions: see `requirements.txt` (generate it from the environment used fo
 
 ## Reproducing the results
 
-All experiments are run from `notebooks/muharaf_ablation.ipynb` (Kaggle, one T4). Run the definition cells (sections 1 to 8),
-then `smoke_test()` once, then `run_queue()`; runs are resumable and finished runs are skipped.
+Both notebooks run on Kaggle (one T4) and download Muharaf-public automatically. Run the definition cells in order.
 
-**Reference configuration** (variant `ref`): CNN from scratch, height 128, maximum width 2720, horizontal stride 4,
+**Main runs and error analysis** (`notebooks/muharaf_main_runs.ipynb`). Set `cfg.seed` (1, 42 or 200) and run the notebook:
+sanity check, training, final evaluation (greedy, prefix beam of 10, beam + 6-gram LM), then the validation diagnostics
+(sections 12b to 12d: dot errors, orthographic variants, S/D/I operations, frame budget T/L), which give the figures of Tables 8 to 12.
+Keep `DIAG_SPLIT = "val"`: the diagnostics of the paper are computed on the validation set.
+
+**Reference configuration**: CNN from scratch, height 128, maximum width 2720, horizontal stride 4,
 3-layer BiLSTM (384 units), 80 epochs, batch 16, AdamW (lr 1e-3, weight decay 1e-2), 3 warm-up epochs, cosine decay,
-EMA 0.999, gradient clipping 5. Checkpoint selected on validation CER; the language-model weights (alpha in {0.3, 0.6},
+EMA 0.999, gradient clipping 5. The checkpoint is selected on validation CER; the language-model weights (alpha in {0.3, 0.6},
 beta in {0.5, 1.5}) are selected on validation; the test set is evaluated once per run.
 One 80-epoch run takes about 6.0 to 6.5 h on a T4 (about 3.5 GB of GPU memory).
 
-```python
-EPOCHS = 80; SEEDS = [1, 42, 200]; VARIANTS = ["ref"]   # reference runs (cf. Table 6 and the re-run of Section 6.2)
-run_queue()
-```
-
-**Ablations (Table 13).** The ablation runs of the paper use a 40-epoch schedule: set `EPOCHS = 40`.
-Reference and `aug_none` use seeds 1, 42, 200; `aug_geom` uses seeds 42 and 200; `stride2`, `stride8`, `h96` and `rasm03` use seed 1 only.
+**Ablations** (`notebooks/muharaf_ablation.ipynb`). Run the definition cells (sections 1 to 8), then `smoke_test()` once, then `run_queue()`.
+The ablation runs of the paper use a 40-epoch schedule: set `EPOCHS = 40`. Reference and `aug_none` use seeds 1, 42, 200;
+`aug_geom` uses seeds 42 and 200; `stride2`, `stride8`, `h96` and `rasm03` use seed 1 only.
 Section 12 of the notebook aggregates the runs (mean, paired differences, LaTeX table).
+The same notebook with `EPOCHS = 80`, `SEEDS = [1, 42, 200]` and `VARIANTS = ["ref"]` gives paired reference runs at the full schedule.
 
-**Decoding ablation (Table 14).** `decoding_ablation()` needs no training. It runs on the `ref` checkpoints, or on any checkpoint listed in
-`DECODING_CKPTS`.
+**Decoding ablation (Table 14).** `decoding_ablation()` needs no training. It runs on the `ref` checkpoints, or on any checkpoint listed in `DECODING_CKPTS`.
 
 ## Running on several Kaggle sessions or accounts
 
@@ -98,20 +99,19 @@ To reproduce this setting, or to merge runs made in different sessions:
 
 ## Known differences between runs (please read)
 
-* **Main runs vs. this notebook.** The three main runs of Table 6 were produced with an earlier version of the code, whose output layer had
+* **Vocabulary of the three main runs.** The three main runs of Table 6 were produced with an earlier version of the code, whose output layer had
   105 character classes plus the CTC blank (the character inventory was built together with another dataset). The six additional symbols never occur as
-  Muharaf training targets. This notebook builds the vocabulary from the Muharaf training lines only (99 classes). The reference run
-  with this code (seed 1, 80 epochs) gives test CER 8.72 % / WER 28.46 % (greedy) and 7.92 % / 24.46 % with the 6-gram LM,
-  inside the range of the three main runs. To reuse the exact vocabulary of an earlier checkpoint, set `VOCAB_FROM_CKPT`.
+  Muharaf training targets. Both notebooks released here build the vocabulary from the Muharaf training lines only (99 classes).
+  The reference run with the final code (seed 1, 80 epochs) gives test CER 8.72 % / WER 28.46 % (greedy) and 7.92 % / 24.46 % with the 6-gram LM,
+  inside the range of the three main runs. To reuse the exact 105-class inventory of an earlier checkpoint, set `cfg.extra_vocab_file`
+  (main notebook) or `VOCAB_FROM_CKPT` (ablation notebook).
 * **Augmentation seed.** In the main runs the random generator of the augmentations was not seeded, so those runs are not bit-wise reproducible.
-  This notebook seeds the augmentations. Expect results within the seed-to-seed spread reported in the paper (about 0.1 CER point), not identical numbers.
-* **Error analysis.** The validation error analysis of the paper (Section 6.4, Tables 8 to 12) is not part of this notebook.
+  The ablation notebook seeds the augmentations. Expect results within the seed-to-seed spread reported in the paper (about 0.1 CER point), not identical numbers.
+* **Unused options.** The main notebook still contains a ConvNeXt V2 backbone option (`cfg.backbone = "convnext"`) that is not used in the paper.
+  Some code comments are in French.
 
 ## Licences
 
 * Code: MIT (see `LICENSE`).
 * Muharaf-public data: CC BY-NC-SA 4.0 (see the dataset card). Trained checkpoints and any text derived from the data
   (for instance the character language model) inherit these non-commercial and share-alike conditions.
-
-
-```
